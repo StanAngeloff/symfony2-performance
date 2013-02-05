@@ -1,0 +1,38 @@
+#!/usr/bin/env bash
+
+set -e
+
+if [ $# -lt 1 ]; then
+  echo "You must specify a directory as the script's first argument."
+  exit 1
+fi
+
+RESULTS_PATH="$1"
+METRIC="${2:-Requests per second}"
+
+shift 2
+
+previous_release=
+previous_length=0
+previous_value=0
+
+average() { echo $'|\t'"$( echo "$previous_value / $previous_length" | bc -l )" ; }
+
+echo "${METRIC}:"
+for log_file in $( find "$RESULTS_PATH" -type f -iname '*.log.*' | sort ); do
+  log_release="$( basename "$log_file" | sed -e 's/\.log\.[[:alnum:]]\+$//' )"
+  if [ -n "$previous_release" ] && [ "$previous_release" != "$log_release" ]; then
+    average
+  fi
+  if [ "$previous_release" != "$log_release" ]; then
+    echo -n "$log_release"$'\t'
+    previous_length=0
+    previous_value=0
+  fi
+  log_value="$( cat "$log_file" | grep "${METRIC}.*$@" | sed -e 's/[^:]\+:\s*//' | cut -d' ' -f1 )"
+  echo -n "$log_value"$'\t'
+  previous_release="$log_release"
+  let 'previous_length = previous_length + 1'
+  previous_value=$( echo "$previous_value + $log_value" | bc -l )
+done
+average
