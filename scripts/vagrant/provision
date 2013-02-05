@@ -74,10 +74,10 @@ for release in '2.0.22' '2.1.7' '2.2.x-dev'; do
       # Move the extracted package contents up one level.
       $SUDO mv "${RELEASE_PATH}/Symfony"/* "$RELEASE_PATH"
     else
-      $SUDO "$COMPOSER_BINARY" create-project --prefer-source 'symfony/framework-standard-edition' "$RELEASE_PATH" "$release"
+      $SUDO "$COMPOSER_BINARY" create-project --prefer-source --no-interaction 'symfony/framework-standard-edition' "$RELEASE_PATH" "$release"
       # @GromNaN suggested optimizing the PSR-0 autoloader.
       # See http://git.io/N7FFyQ
-      ( cd "$RELEASE_PATH" && $SUDO "$COMPOSER_BINARY" dump-autoload --optimize )
+      $SUDO "$COMPOSER_BINARY" dump-autoload --optimize --no-interaction -d "$RELEASE_PATH"
     fi
     # Enable the AcmeDemoBundle in production.
     $SUDO sed -e '/SensioFrameworkExtraBundle/i new Acme\\DemoBundle\\AcmeDemoBundle(),' -i "${RELEASE_PATH}/app/AppKernel.php"
