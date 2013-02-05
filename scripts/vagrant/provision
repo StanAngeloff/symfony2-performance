@@ -1,0 +1,90 @@
+#!/usr/bin/env bash
+
+# {{{ Ubuntu utilities
+
+<%= import 'shell-scripts/ubuntu.sh' %>
+
+# }}}
+
+# {{{ Configuration
+
+VAGRANT_USER='vagrant'
+VAGRANT_MOUNT="/${VAGRANT_USER}"
+
+WWW_USER='www-data'
+
+# }}}
+
+# Use Google Public DNS for resolving domain names.
+# The default is host-only DNS which may not be installed.
+nameservers-local-purge
+nameservers-append '8.8.8.8'
+nameservers-append '8.8.4.4'
+
+# Use a local Ubuntu mirror, results in faster downloads.
+apt-mirror-pick 'uk'
+
+# Update packages cache.
+apt-packages-update
+
+# Install VM packages.
+apt-packages-install    \
+  language-pack-en      \
+  curl                  \
+  apache2-mpm-prefork   \
+  apache2-suexec-custom \
+  libapache2-mod-php5   \
+  php5-cli
+
+log-operation 'locale-gen'
+$SUDO locale-gen 'en_GB.UTF-8' 1>/dev/null
+
+# Set up a default PHP timezone.
+php-settings-update 'date.timezone' 'Europe/London'
+# Allow PHP errors to be printed to output.
+php-settings-update 'display_errors' 'On'
+
+# Download and install Composer
+log-operation 'install' 'composer'
+COMPOSER_BINARY="/usr/local/bin/composer.phar"
+if [ ! -e "$COMPOSER_BINARY" ]; then
+  COMPOSER_PATH="$( dirname "$COMPOSER_BINARY" )"
+  $SUDO mkdir -p "$COMPOSER_PATH"
+  $SUDO chown "${VAGRANT_USER}:${VAGRANT_USER}" "$COMPOSER_PATH"
+  curl -s 'https://getcomposer.org/installer' | php -- --install-dir="$COMPOSER_PATH" 1>/dev/null
+  $SUDO chown "${VAGRANT_USER}:${VAGRANT_USER}" "$COMPOSER_BINARY"
+fi
+
+# Install Symfony releases in /var/www
+APACHE_DEFAULT_PATH='/var/www'
+APACHE_BENCHMARK_PATH_TEMPLATE="${APACHE_DEFAULT_PATH}/benchmark/symfony-{release}"
+
+for release in '2.0.22' '2.1.7' '2.2.x-dev'; do
+  log-operation 'install' 'symfony' "$release"
+  RELEASE_PATH="$( echo "$APACHE_BENCHMARK_PATH_TEMPLATE" | sed -e 's/{release}/'"$release"'/' )"
+  # If the release directory is already in place, skip.
+  if [ ! -d "$RELEASE_PATH" ]; then
+    RELEASE_DOWNLOAD="http://symfony.com/get/Symfony_Standard_Vendors_${release}.tgz"
+    # Try and download an archived release of Symfony.
+    if curl -s --head --fail "$RELEASE_DOWNLOAD" 1>/dev/null; then
+      # Create the release directory for `tar`.
+      $SUDO mkdir -p "$RELEASE_PATH"
+      curl --insecure -L -s "$RELEASE_DOWNLOAD" | $SUDO tar zxf - -C "$RELEASE_PATH"
+      # Move the extracted package contents up one level.
+      $SUDO mv "${RELEASE_PATH}/Symfony"/* "$RELEASE_PATH"
+    else
+      $SUDO "$COMPOSER_BINARY" create-project --prefer-dist 'symfony/framework-standard-edition' "$RELEASE_PATH" "$release"
+    fi
+    # Enable the AcmeDemoBundle in production.
+    $SUDO sed -e '/SensioFrameworkExtraBundle/i new Acme\\DemoBundle\\AcmeDemoBundle(),' -i "${RELEASE_PATH}/app/AppKernel.php"
+    $SUDO grep 'AcmeDemoBundle' -B2 -A2 "${RELEASE_PATH}/app/config/routing_dev.yml" | $SUDO tee -a "${RELEASE_PATH}/app/config/routing.yml" 1>/dev/null
+    # We are using SuExec, clean up ownership.
+    $SUDO chown -R "${WWW_USER}:${WWW_USER}" "$RELEASE_PATH"
+  fi
+done
+
+# Allow modules for Apache.
+apache-modules-enable suexec
+
+# Restart Apache web service.
+apache-restart

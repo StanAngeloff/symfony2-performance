@@ -1,0 +1,87 @@
+#!/usr/bin/env bash
+
+set -e
+
+# @see https://gist.github.com/dlsniper/4707496
+# @see https://github.com/symfony/symfony-standard/issues/464#issuecomment-13107583
+
+ITERATIONS=5
+CONCURENT=10
+REQUESTS=100000
+SLEEP_SHORT=10
+SLEEP_LONG=60
+
+APACHE_BASE_URI='http://127.0.0.1/benchmark'
+VAGRANT_MOUNT='/vagrant'
+WWW_PATH='/var/www/benchmark'
+
+if [ "$(id -u)" != 0 ]; then
+  echo 'Sorry, you are not root.' 1>&2
+  exit 1
+fi
+
+if [ ! -d "${WWW_PATH}" ]; then
+  echo "Can't seem to find ${WWW_PATH}" 1>&2
+  exit 1
+fi
+
+RESULTS_PATH="${VAGRANT_MOUNT}/results-$( date '+%s' )"
+mkdir -p "$RESULTS_PATH"
+
+echo "Running benchmark, saving logs to ${RESULTS_PATH}:";
+
+for release in "${WWW_PATH}"/symfony-*; do
+
+  SYMFONY_CACHE_PATH="${release}/app/cache/prod"
+  SYMFONY_LOG_PATH="${release}/app/logs/prod.log"
+  release="$( basename "$release" )"
+  SYMFONY_URI="${APACHE_BASE_URI}/${release}/web/app.php"
+
+  for index in $( seq 1 $ITERATIONS ); do
+    echo "Performing iteration ${index} of ${ITERATIONS}:"
+    echo -n '  [*] Stopping Apache... '
+    service apache2 stop 1>/dev/null 2>&1
+    echo 'OK'
+
+    echo -n '  [*] Clearing Apache log files... '
+    echo > /var/log/apache2/access.log
+    echo > /var/log/apache2/error.log
+    echo 'OK'
+
+    echo -n '  [*] Clearing Symfony2 files... '
+    rm -rf "${SYMFONY_CACHE_PATH}"
+    echo > "${SYMFONY_LOG_PATH}"
+    echo 'OK'
+
+    echo -n '  [*] Taking a nap... '
+    sleep $SLEEP_SHORT
+    echo 'woke up'
+
+    echo -n '  [*] Starting Apache... '
+    service apache2 start 1>/dev/null 2>&1
+    echo 'OK'
+
+    echo -n '  [*] Perform warm-up for Symfony cache... '
+    curl --fail -s "${SYMFONY_URI}" 1>/dev/null
+    echo 'OK'
+
+    echo -n '  [*] Taking a nap... '
+    sleep $SLEEP_SHORT
+    echo 'woke up'
+
+    # Use a temporary file to avoid writing directly to a file in a VirtualBox shared folders.
+    RESULTS_FILE="$( mktemp -t 'results-XXXXXXXX.log' )"
+
+    echo -n "  [*] Benchmarking ${SYMFONY_URI} with ${REQUESTS} total requests ( ${CONCURENT} concurrent )... "
+    ab -c $CONCURENT -n $REQUESTS "${SYMFONY_URI}" >> "$RESULTS_FILE"
+    echo 'done'
+
+    mv "$RESULTS_FILE" "${RESULTS_PATH}/${release}.log.${index}"
+
+    echo -n '  [*] Taking a long nap... '
+    sleep $SLEEP_LONG
+    echo 'woke up'
+
+    echo
+  done
+done
