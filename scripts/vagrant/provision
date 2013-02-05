@@ -30,6 +30,7 @@ apt-packages-update
 # Install VM packages.
 apt-packages-install    \
   language-pack-en      \
+  git-core              \
   curl                  \
   apache2-mpm-prefork   \
   apache2-suexec-custom \
@@ -73,7 +74,7 @@ for release in '2.0.22' '2.1.7' '2.2.x-dev'; do
       # Move the extracted package contents up one level.
       $SUDO mv "${RELEASE_PATH}/Symfony"/* "$RELEASE_PATH"
     else
-      $SUDO "$COMPOSER_BINARY" create-project --prefer-dist 'symfony/framework-standard-edition' "$RELEASE_PATH" "$release"
+      $SUDO "$COMPOSER_BINARY" create-project --prefer-source 'symfony/framework-standard-edition' "$RELEASE_PATH" "$release"
       # @GromNaN suggested optimizing the PSR-0 autoloader.
       # See http://git.io/N7FFyQ
       ( cd "$RELEASE_PATH" && $SUDO "$COMPOSER_BINARY" dump-autoload --optimize )
