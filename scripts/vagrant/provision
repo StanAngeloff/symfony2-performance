@@ -35,7 +35,8 @@ apt-packages-install    \
   apache2-mpm-prefork   \
   apache2-suexec-custom \
   libapache2-mod-php5   \
-  php5-cli
+  php5-cli              \
+  php-apc
 
 log-operation 'locale-gen'
 $SUDO locale-gen 'en_GB.UTF-8' 1>/dev/null
