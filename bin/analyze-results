@@ -33,7 +33,7 @@ for log_file in $( find "$RESULTS_PATH" -type f -iname '*.log.*' | sort ); do
     previous_length=0
     previous_value=0
   fi
-  log_value="$( cat "$log_file" | grep "${METRIC}.*$@" | sed -e 's/[^:]\+:\s*//' | cut -d' ' -f1 )"
+  log_value="$( cat "$log_file" | grep "${METRIC}.*$@" | sed -e 's/[^:]\+:\s*//' | tr -d $'\n' | cut -d' ' -f1 )"
   echo -n "$log_value"$'\t'
   previous_release="$log_release"
   let 'previous_length = previous_length + 1'
