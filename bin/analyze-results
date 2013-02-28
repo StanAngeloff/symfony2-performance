@@ -7,10 +7,14 @@ if [ $# -lt 1 ]; then
   exit 1
 fi
 
-RESULTS_PATH="$1"
-METRIC="${2:-Requests per second}"
+METRIC='Requests per second'
+if [ $# -gt 1 ]; then
+  METRIC="$1"
+  shift
+fi
 
-shift 2
+RESULTS_PATH="$1"
+shift
 
 previous_release=
 previous_length=0
